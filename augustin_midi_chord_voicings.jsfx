@@ -1,0 +1,90 @@
+desc: MIDI Chord Voicings
+//tags: MIDI processing
+//author: Christian Augustin
+
+slider1:0<0,15,1{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}>Note Channel
+slider2:1<0,15,1{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}>Trig Channel
+slider3:0<0,15,1{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}>Out Channel
+
+// tells plugin that it has no midi in / midi out, saves performance
+in_pin:none
+out_pin:none
+
+////////////////////////////////////////////////////////////////////////////////
+@init
+noteOn = $x90;
+noteOff = $x80;
+notes = 127;
+active = 0;
+
+////////////////////////////////////////////////////////////////////////////////
+@slider
+
+noteChannel = slider1;
+trigChannel = slider2;
+outChannel = slider3;
+
+////////////////////////////////////////////////////////////////////////////////
+@block
+
+while (
+	midirecv(offset, msg1, msg23) ? (
+		// Extract message type and channel
+		status = msg1 & $xF0;
+		channel = msg1 & $x0F;
+
+		(status == noteOn || status == noteOff) ? (
+
+			note = msg23 & $x7F;
+			// Extract velocity
+			vel = (msg23 & $xFF00) >> 8;
+
+			// is the channel the note channel or zero (all channels but trigChannel)?
+			channel == noteChannel ? (
+
+				status == noteOn ? (
+					notes[note] = 1;
+					active = 1;
+				) : (
+					notes[note] = 0;
+				);
+
+			);
+
+			channel == trigChannel ? (
+				status == noteOn ? (
+					// send midi note on for all notes that are on
+					i = 0;
+					loop(127,
+						notes[i] == 1 ? (
+							// send note on
+							midisend(outChannel, $x90, i, vel);
+						);
+						i = i + 1;
+					);
+				) : (
+				// send note off for all notes that are on
+					i = 0;
+					loop(127,
+						notes[i] == 1 ? (
+							// send note off
+							midisend(outChannel, $x80, i, 0);
+						);
+						i = i + 1;
+					);
+				);
+			);
+		);
+		1; // Force loop to continue until all messages have been processed
+	);
+);
+
+play_state == 0 && active == 1 ? (
+ // send midi off to all notes
+	i = 0;
+	loop(127,
+		midisend(outChannel, $x80, i, 0);
+		i = i + 1;
+	);
+	active = 0;
+)
