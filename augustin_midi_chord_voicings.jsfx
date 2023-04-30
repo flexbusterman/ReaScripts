@@ -2,9 +2,23 @@ desc: MIDI Chord Voicings
 //tags: MIDI processing
 //author: Christian Augustin
 
-slider1:0<0,15,1{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}>Note Channel
-slider2:1<0,15,1{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}>Trig Channel
-slider3:0<0,15,1{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}>Out Channel
+slider1:0<0,1,1{Bottom,Top}>Count Voices From
+slider2:1<0,6,1{Off,On,Up,Down,Random Up,Random Down,Random Up/Down}>Voice 1 Mode
+slider3:0<0,12,1>Voice 1 Octave Range
+slider4:0<0,6,1{Off,On,Up,Down,Random Up,Random Down,Random Up/Down}>Voice 2 Mode
+slider5:0<0,12,1>Voice 2 Octave Range
+slider6:0<0,6,1{Off,On,Up,Down,Random Up,Random Down,Random Up/Down}>Voice 3 Mode
+slider7:0<0,12,1>Voice 3 Octave Range
+slider8:0<0,6,1{Off,On,Up,Down,Random Up,Random Down,Random Up/Down}>Voice 4 Mode
+slider9:0<0,12,1>Voice 4 Octave Range
+slider10:0<0,6,1{Off,On,Up,Down,Random Up,Random Down,Random Up/Down}>Voice 5 Mode
+slider11:0<0,12,1>Voice 5 Octave Range
+slider12:0<0,6,1{Off,On,Up,Down,Random Up,Random Down,Random Up/Down}>Voice 6 Mode
+slider13:0<0,12,1>Voice 6 Octave Range
+slider14:0<0,6,1{Off,On,Up,Down,Random Up,Random Down,Random Up/Down}>Voice 7 Mode
+slider15:0<0,12,1>Voice 7 Octave Range
+slider16:0<0,6,1{Off,On,Up,Down,Random Up,Random Down,Random Up/Down}>Voice 8 Mode
+slider17:0<0,12,1>Voice 8 Octave Range
 
 // tells plugin that it has no midi in / midi out, saves performance
 in_pin:none
@@ -15,17 +29,37 @@ out_pin:none
 noteOn = $x90;
 noteOff = $x80;
 notes = 127;
+rangeArray = 8;
+modeArray = 8;
 active = 0;
+voiceCount = 0;
+atest = 0;
 
 ////////////////////////////////////////////////////////////////////////////////
 @slider
 
-noteChannel = slider1;
-trigChannel = slider2;
-outChannel = slider3;
+// GUI uses voice index 1-8, but code uses 0-7
+voiceDir = slider1;
+modeArray[0] = slider2;
+modeArray[1] = slider4;
+modeArray[2] = slider6;
+modeArray[3] = slider8;
+modeArray[4] = slider10;
+modeArray[5] = slider12;
+modeArray[6] = slider14;
+modeArray[7] = slider16;
+rangeArray[0] = slider3;
+rangeArray[1] = slider5;
+rangeArray[2] = slider7;
+rangeArray[3] = slider9;
+rangeArray[4] = slider11;
+rangeArray[5] = slider13;
+rangeArray[6] = slider15;
+rangeArray[7] = slider17;
 
 ////////////////////////////////////////////////////////////////////////////////
 @block
+
 
 while (
 	midirecv(offset, msg1, msg23) ? (
@@ -35,52 +69,50 @@ while (
 
 		(status == noteOn || status == noteOff) ? (
 
+			// Extract note and velocity
 			note = msg23 & $x7F;
-			// Extract velocity
 			vel = (msg23 & $xFF00) >> 8;
 
-			// is the channel the note channel or zero (all channels but trigChannel)?
-			channel == noteChannel ? (
-
-				status == noteOn ? (
-					notes[note] = 1;
-					active = 1;
-				) : (
-					notes[note] = 0;
-				);
-
+			// If noteOn, set note in array to 1, otherwise set note in array to 0
+			status == noteOn ? (
+				notes[note] = 1;
+				active = 1;
+			) : (
+				notes[note] = 0;
 			);
 
-			channel == trigChannel ? (
-				status == noteOn ? (
-					// send midi note on for all notes that are on
-					i = 0;
-					loop(127,
-						notes[i] == 1 ? (
-							// send note on
-							midisend(outChannel, $x90, i, vel);
-						);
-						i = i + 1;
-					);
-				) : (
-				// send note off for all notes that are on
-					i = 0;
-					loop(127,
-						notes[i] == 1 ? (
-							// send note off
-							midisend(outChannel, $x80, i, 0);
-						);
-						i = i + 1;
-					);
-				);
+			voiceCount = 0;
+
+			// if voiceDir is 0 (bottom) then loop from 0 to 127
+
+			voiceDir == 0 ? (
+				i = 0;
+				inc = 1;
+			) : (
+			// else it's Top and loop should count down from 127
+				i = 127;
+				inc = -1;
 			);
+
+			// if it's the lowest note, send note on
+			loop(127,
+				notes[i] == 1 ? (
+					midisend(channel, noteOn, i, vel);
+					voiceCount = voiceCount + 1;
+				) : (
+					midisend(channel, noteOff, i, 0);
+				);
+				i = i + inc;
+			);
+
 		);
+
 		1; // Force loop to continue until all messages have been processed
 	);
 );
 
 play_state == 0 && active == 1 ? (
- // send midi off to all notes
+ // send midi off to all notes if stopped and active
 	i = 0;
 	loop(127,
 		midisend(outChannel, $x80, i, 0);
