@@ -2,7 +2,7 @@ desc:MIDI Channel Solo
 //tags: MIDI processing
 //author: Christian Augustin
 
-slider1:100<0,100,1>Probability
+slider1:0<0,15,1{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}>Solo Channel
 
 // tells plugin that it has no midi in / midi out, saves performance
 in_pin:none
@@ -12,11 +12,10 @@ out_pin:none
 @init
 noteOn = $x90;
 noteOff = $x80;
-active = 0;
 
 ////////////////////////////////////////////////////////////////////////////////
 @slider
-probability = slider1;
+channel = slider1;
 
 ////////////////////////////////////////////////////////////////////////////////
 @block
@@ -26,12 +25,14 @@ while (
 		// Extract message type and channel
 		status = msg1 & $xF0;
 		channel = msg1 & $x0F;
-		status == noteOn ? (
-			note = msg23 & $x7F;
-			vel = (msg23 & $xFF00) >> 8;
-			// if random number is less than probability, send note on
-			rand(100) < probability ? (
-				midisend(channel, noteOn, note, vel);
+		channel == slider1 ? (
+			// if status is noteOn
+			status == noteOn || status == noteOff ? (
+				// Extract note and velocity
+				note = msg23 & $x7F;
+				vel = (msg23 & $xFF00) >> 8;
+				midisend(channel, status, note, vel);
+				active = 1;
 			);
 		);
 		1; // Force loop to continue until all messages have been processed
