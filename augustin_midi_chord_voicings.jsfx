@@ -29,11 +29,12 @@ out_pin:none
 noteOn = $x90;
 noteOff = $x80;
 active = 0;
-test = 0;
-// defining where in memory the "arrays" begin
-notes = 0;
-rangeArray = 128;
-modeArray = 136;
+voiceCount = 0;
+noteArraySize = 0;
+// defining where in memory the "arrays" begin, allows for 16 note polyphony
+noteArray = 0;
+rangeArray = 16;
+modeArray = 24;
 
 ////////////////////////////////////////////////////////////////////////////////
 @slider
@@ -71,25 +72,60 @@ while (
 			// Extract note and velocity
 			note = msg23 & $x7F;
 			vel = (msg23 & $xFF00) >> 8;
-			status == noteOn && vel > 0 ? (
-				notes[note] = 1;
+
+			status == noteOn ? (
+				noteArray[voiceCount] = note;
+				// send noteOn to midi out
+				midisend(offset, $x90 + channel, note, vel);
+				test = noteArray[voiceCount];
+				voiceCount = voiceCount + 1;
 			) : (
-				notes[note] = 0;
-				test = 1;
+				// if noteOff, loop through noteArray
+				i = 0;
+				loop(voiceCount,
+					// if one element is the same as note
+					noteArray[voiceCount] == note ? (
+						// send noteOff to midi out
+						midisend(offset, $x80 + channel, note, vel);
+						// remove that note from noteArray
+						i = 0;
+						loop(voiceCount,
+							noteArray[i] == note ? (
+								j = i;
+								// shift all elements after note down by one index
+								loop(voiceCount - j,
+									noteArray[j] = noteArray[j + 1];
+									j = j + 1;
+								);
+							);
+							i = i + 1;
+						);
+						// decrease voiceCount by one
+						voiceCount = voiceCount - 1;
+					);
+				);
 			);
-			midisend(offset, msg1, note, vel);
+
+
+			// TODO: sort noteArray using bubble sort
+			loop(voiceCount,
+				i = 0;
+				loop(voiceCount - 1,
+					noteArray[i] > noteArray[i + 1] ? (
+						temp = noteArray[i];
+						noteArray[i] = noteArray[i + 1];
+						noteArray[i + 1] = temp;
+					);
+					i = i + 1;
+				);
+			);
+
+
+//////////////////////////////////////////////////
+
 		) : (
 			// forward all other messages
 			midisend(offset, msg1, msg23);
-		);
-
-		voiceCount = 0;
-		i = 0;
-		loop(127,
-			notes[i] == 1 ? (
-				voiceCount = voiceCount + 1;
-			);
-			i = i + 1;
 		);
 
 		1; // Force loop to continue until all messages have been processed
