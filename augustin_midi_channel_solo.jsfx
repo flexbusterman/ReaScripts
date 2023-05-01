@@ -12,10 +12,11 @@ out_pin:none
 @init
 noteOn = $x90;
 noteOff = $x80;
+noteCount = 0;
 
 ////////////////////////////////////////////////////////////////////////////////
 @slider
-channel = slider1;
+soloChannel = slider1;
 
 ////////////////////////////////////////////////////////////////////////////////
 @block
@@ -25,15 +26,8 @@ while (
 		// Extract message type and channel
 		status = msg1 & $xF0;
 		channel = msg1 & $x0F;
-		channel == slider1 ? (
-			// if status is noteOn
-			status == noteOn || status == noteOff ? (
-				// Extract note and velocity
-				note = msg23 & $x7F;
-				vel = (msg23 & $xFF00) >> 8;
-				midisend(channel, status, note, vel);
-				active = 1;
-			);
+		channel == soloChannel ? (
+			midisend(offset, msg1, msg23);
 		);
 		1; // Force loop to continue until all messages have been processed
 	);

@@ -14,12 +14,11 @@ out_pin:none
 @init
 noteOn = $x90;
 noteOff = $x80;
-notes = 127;
+notes = 0;
 active = 0;
 
 ////////////////////////////////////////////////////////////////////////////////
 @slider
-
 noteChannel = slider1;
 trigChannel = slider2;
 outChannel = slider3;
@@ -30,65 +29,70 @@ outChannel = slider3;
 while (
 	midirecv(offset, msg1, msg23) ? (
 		// Extract message type and channel
-		status = msg1 & $xF0;
-		channel = msg1 & $x0F;
+    status = msg1 & $xF0;
+    channel = msg1 & $x0F;
 
 		(status == noteOn || status == noteOff) ? (
 
 			note = msg23 & $x7F;
 			// Extract velocity
-			vel = (msg23 & $xFF00) >> 8;
+			vel = msg23 >> 8;
 
-			// is the channel the note channel or zero (all channels but trigChannel)?
+			// is the channel the note channel?
 			channel == noteChannel ? (
-
-				status == noteOn ? (
+				status == noteOn && vel > 0 ? (
 					notes[note] = 1;
 					active = 1;
 				) : (
 					notes[note] = 0;
 				);
-
 			);
 
-			noteCount = 0;
+			voiceCount = 0;
+			i = 0;
+			loop(127,
+				notes[i] == 1 ? (
+					voiceCount = voiceCount + 1;
+				);
+				i = i + 1;
+			);
 
 			channel == trigChannel ? (
-				status == noteOn ? (
-					// send midi note on for all notes that are on
+				status == noteOn && vel > 0 ? (
+					// if status is noteOn, send midi note on for all notes that are on
 					i = 0;
 					loop(127,
 						notes[i] == 1 ? (
 							// send note on
-							midisend(outChannel, $x90, i, vel);
-							noteCount = noteCount + 1;
+							// offset status + channel, note, velocity
+							midisend(offset, noteOn + outChannel, i, vel);
 						);
 						i = i + 1;
 					);
 				) : (
-				// send note off for all notes that are on
+				// if status is noteOff, send note off for all notes
 					i = 0;
 					loop(127,
-						notes[i] == 1 ? (
-							// send note off
-							midisend(outChannel, $x80, i, 0);
-							notes[i] = 0;
-						);
+						midisend(offset, noteOff + outChannel, i, 0);
 						i = i + 1;
 					);
 				);
+
 			);
+			1; // Force loop to continue until all messages have been processed
 		);
-		1; // Force loop to continue until all messages have been processed
 	);
 );
 
 play_state == 0 && active == 1 ? (
- // send midi off to all notes
+ // send midi off to all notes on all channels
 	i = 0;
 	loop(127,
-		midisend(outChannel, $x80, i, 0);
+		j = 0;
+		loop(16,
+			midisend(offset, noteOff + j, i, 0);
+		);
 		i = i + 1;
 	);
-	active = 0;
-)
+);
+active = 0;
