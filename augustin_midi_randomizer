@@ -1,0 +1,64 @@
+desc:MIDI Randomizer
+//tags: MIDI processing
+//author: Christian Augustin
+
+slider1:0<-127,127,1>Transpose
+slider2:100<0,100,1>Randomizer Probability
+slider3:0<0,2,1{Up,Down,Bidirectional}>Direction
+slider4:12<0,12,1>Semitone Range
+slider5:1<1,8,1>Octave Range
+slider6:1<1,128,1>Min Note Out
+slider7:128<1,128,1>Max Note Out
+
+// tells plugin that it has no midi in / midi out, saves performance
+in_pin:none
+out_pin:none
+
+////////////////////////////////////////////////////////////////////////////////
+@init
+noteOn = $x90;
+noteOff = $x80;
+active = 0;
+lastNote = -1;
+incProbability = 0;
+
+////////////////////////////////////////////////////////////////////////////////
+@slider
+probability = slider1;
+increment = slider2;
+
+////////////////////////////////////////////////////////////////////////////////
+@block
+
+while (
+    midirecv(offset, msg1, msg23) ? (
+        // Extract message type and channel
+        status = msg1 & $xF0;
+        channel = msg1 & $x0F;
+        note = msg23 & $x7F;
+        vel = (msg23 & $xFF00) >> 8;
+        status == noteOn && vel > 0 ? (
+            // if random number is less than probability, send note on
+            rand(100) < (probability + incProbability) ? (
+                midisend(offset, noteOn + channel, note, vel);
+                lastNote = note;
+                incProbability = 0;
+            ) : (
+              incProbability = incProbability + increment;
+            );
+        ) : (
+          midisend(offset, noteOff + channel, note, vel);
+        );
+        1; // Force loop to continue until all messages have been processed
+    );
+);
+
+play_state == 0 && active == 1 ? (
+ // send midi off to all notes
+    i = 0;
+    loop(127,
+        midisend(channel, $x80, i, 0);
+        i = i + 1;
+    );
+    active = 0;
+)
